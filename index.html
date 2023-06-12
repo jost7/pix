@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        #container {
+            position: relative;
+            width: 320px;
+            height: 320px;
+        }
+        #drawingCanvas, #gridCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            border: 1px solid black;
+        }
+        #gridCanvas {
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <canvas id="drawingCanvas" width="320" height="320"></canvas>
+        <canvas id="gridCanvas" width="320" height="320"></canvas>
+    </div>
+    <button id="chooseColor">Choose Color</button>
+    <button id="erase">Erase</button>
+    <button id="saveImage">Save Image</button>
+    Pixel Size: <input type="number" id="pixelSize" min="1" max="100" value="20"><br>
+    <h2>Grid Settings</h2>
+    <input type="checkbox" id="gridToggle" checked> Display grid<br>
+    Grid Opacity: <input type="range" id="gridOpacity" min="0" max="1" step="0.01" value="1">
+    <script>
+        const drawingCanvas = document.querySelector('#drawingCanvas');
+        const gridCanvas = document.querySelector('#gridCanvas');
+        const ctx = drawingCanvas.getContext('2d');
+        const gridCtx = gridCanvas.getContext('2d');
+        let color = '#000000';
+        let pixelSize = 20;
+        let gridVisible = true;
+        let gridOpacity = 1;
+        let erasing = false;
+        let pixels = [];
+        let pixelPromise = Promise.resolve();
+
+        drawingCanvas.addEventListener('click', (event) => {
+            pixelPromise = pixelPromise.then(() => drawPixel(event));
+        });
+
+        document.querySelector('#pixelSize').addEventListener('input', (event) => {
+            pixelPromise = pixelPromise.then(() => {
+                let oldPixels = JSON.parse(JSON.stringify(pixels));
+                pixelSize = parseInt(event.target.value);
+                ctx.clearRect(0, 0, drawingCanvas.width, drawingCanvas.height);
+                pixels = new Array(Math.ceil(drawingCanvas.height / pixelSize)).fill(null).map(() => new Array(Math.ceil(drawingCanvas.width / pixelSize)).fill(null));
+                for(let y = 0; y < oldPixels.length; y++) {
+                    for(let x = 0; x < oldPixels[y].length; x++) {
+                        if(oldPixels[y][x]) {
+                            ctx.fillStyle = oldPixels[y][x];
+                            ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+                            pixels[Math.floor(y * oldPixels.length / pixels.length)][Math.floor(x * oldPixels[0].length / pixels[0].length)] = oldPixels[y][x];
+                        }
+                    }
+                }
+                drawGrid();
+            });
+        });
+
+        function drawPixel(event) {
+            return new Promise((resolve) => {
+                const rect = drawingCanvas.getBoundingClientRect();
+                const x = Math.floor((event.clientX - rect.left) / pixelSize);
+                const y = Math.floor((event.clientY - rect.top) / pixelSize);
+                if (x >= 0 && y >= 0 && x < pixels[0].length && y < pixels.length) {  // Ensure the click is within the array bounds
+                    if(erasing) {
+                        ctx.clearRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+                        pixels[y][x] = null;
+                    } else {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+                        pixels[y][x] = color;
+                    }
+                }
+                resolve();
+            });
+        }
+
+        document.querySelector('#chooseColor').addEventListener('click', () => {
+            pixelPromise = pixelPromise.then(() => {
+                color = prompt('Enter a color:');
+            });
+        });
+
+        document.querySelector('#erase').addEventListener('click', () => {
+            pixelPromise = pixelPromise.then(() => {
+                erasing = !erasing;
+            });
+        });
+
+        document.querySelector('#saveImage').addEventListener('click', () => {
+            const dataUrl = drawingCanvas.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = 'image.png';
+            a.click();
+        });
+
+        document.querySelector('#gridToggle').addEventListener('change', (event) => {
+            gridVisible = event.target.checked;
+            drawGrid();
+        });
+
+        document.querySelector('#gridOpacity').addEventListener('input', (event) => {
+            gridOpacity = parseFloat(event.target.value);
+            drawGrid();
+        });
+
+        function drawGrid() {
+            gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+            if (gridVisible) {
+                gridCtx.strokeStyle = `rgba(0, 0, 0, ${gridOpacity})`;
+                for (let i = 0; i <= gridCanvas.width; i += pixelSize) {
+                    gridCtx.beginPath();
+                    gridCtx.moveTo(i, 0);
+                    gridCtx.lineTo(i, gridCanvas.height);
+                    gridCtx.stroke();
+                }
+                for (let i = 0; i <= gridCanvas.height; i += pixelSize) {
+                    gridCtx.beginPath();
+                    gridCtx.moveTo(0, i);
+                    gridCtx.lineTo(gridCanvas.width, i);
+                    gridCtx.stroke();
+                }
+            }
+        }
+
+        for (let i = 0; i < drawingCanvas.height / pixelSize; i++) {
+            pixels[i] = new Array(drawingCanvas.width / pixelSize).fill(null);
+        }
+
+        drawGrid();
+    </script>
+</body>
+</html>
